@@ -1,0 +1,101 @@
+
+-- 01.建議觀查賣出的數量統計 --
+[SQL]
+WITH x_values(x) AS (
+    VALUES (80), (85), (90),(95),(97),(99),(100)
+)
+SELECT
+    CAST(x AS TEXT) AS n,
+    (
+        SELECT COUNT(*)
+        FROM "stock_daily"
+        WHERE 1=1
+          AND date = strftime('%Y%m%d', 'now', '+8 hours')
+          AND s_kdj IS NOT NULL
+          AND json_valid(s_kdj)
+          AND json_extract(s_kdj, '$.j') >= x_values.x
+          AND s_rsi IS NOT NULL
+          AND json_valid(s_rsi)
+          AND json_extract(s_rsi, '$.rsi6') >= x_values.x
+    ) AS cnts
+FROM x_values;
++-----+------+
+| n   | cnts |
++-----+------+
+| 80  | 0    |
+| 85  | 0    |
+| 90  | 0    |
+| 95  | 0    |
+| 97  | 0    |
+| 99  | 0    |
+| 100 | 0    |
++-----+------+
+ -- 共 7 筆（顯示 7 筆）--
+
+-- 02.建議觀查的買進數量統計 --
+[SQL]
+WITH x_values(x) AS (
+    VALUES (1),(2),(3),(4),(5),(7),(9), (10), (15), (20), (25), (30),(35)
+)
+SELECT
+    CAST(x AS TEXT) AS n,
+    (
+        SELECT COUNT(*)
+        FROM "stock_daily"
+        WHERE 1=1
+          AND date = strftime('%Y%m%d', 'now', '+8 hours')
+          AND s_kdj IS NOT NULL
+          AND json_valid(s_kdj)
+          AND json_extract(s_kdj, '$.j') <= x_values.x
+          AND s_rsi IS NOT NULL
+          AND json_valid(s_rsi)
+          AND json_extract(s_rsi, '$.rsi6') <= x_values.x
+    ) AS cnts
+FROM x_values;
++----+------+
+| n  | cnts |
++----+------+
+| 1  | 0    |
+| 2  | 0    |
+| 3  | 0    |
+| 4  | 0    |
+| 5  | 0    |
+| 7  | 0    |
+| 9  | 0    |
+| 10 | 0    |
+| 15 | 0    |
+| 20 | 0    |
+| 25 | 0    |
+| 30 | 0    |
+| 35 | 0    |
++----+------+
+ -- 共 13 筆（顯示 13 筆）--
+
+-- SQL 查詢結果 --
+[SQL]
+SELECT DISTINCT date FROM otc_stock_daily WHERE date <= '20261006' ORDER BY date DESC LIMIT 30;
++----------+
+| date     |
++----------+
+| 20261006 |
+| 20261005 |
+| 20261002 |
+| 20261001 |
+| 20260930 |
+| 20260929 |
+| 20260924 |
+| 20260923 |
+| 20260922 |
+| 20260921 |
+| 20260918 |
+| 20260917 |
+| 20260916 |
+| 20260915 |
+| 20260914 |
+| 20260911 |
+| 20260910 |
+| 20260909 |
+| 20260908 |
+| 20260907 |
++----------+
+ -- 共 30 筆（顯示 20 筆）--
