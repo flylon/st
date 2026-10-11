@@ -1,0 +1,367 @@
+html_content = """<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>台股多週期市場走勢與分佈動態儀表板</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f4f6f9;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+        }
+        h1 {
+            text-align: center;
+            font-size: 26px;
+            color: #1a1a1a;
+            margin-bottom: 5px;
+        }
+        .subtitle {
+            text-align: center;
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 25px;
+        }
+        .period-selector {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+        .period-btn {
+            padding: 10px 18px;
+            font-size: 14px;
+            font-weight: 600;
+            border: 1px solid #ced4da;
+            background: #fff;
+            color: #495057;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        .period-btn:hover {
+            background: #e9ecef;
+            border-color: #adb5bd;
+        }
+        .period-btn.active {
+            background: #1c7ed6;
+            color: #fff;
+            border-color: #1c7ed6;
+            box-shadow: 0 2px 6px rgba(28, 126, 214, 0.3);
+        }
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            align-items: center;
+        }
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        .chart-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #e9ecef;
+            text-align: center;
+        }
+        .chart-card h3 {
+            margin-top: 0;
+            margin-bottom: 15px;
+            font-size: 16px;
+            color: #343a40;
+        }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            max-width: 350px;
+            margin: 0 auto;
+        }
+        .stats-summary {
+            margin-top: 30px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        .stat-box {
+            background: #f1f3f5;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            border-left: 4px solid #ced4da;
+        }
+        .stat-box.up { border-left-color: #e03131; }
+        .stat-box.down { border-left-color: #2b8a3e; }
+        .stat-box.flat { border-left-color: #868e96; }
+        
+        .stat-box h4 {
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: #495057;
+        }
+        .stat-box p {
+            margin: 0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        .text-red { color: #e03131; }
+        .text-green { color: #2b8a3e; }
+        .text-gray { color: #495057; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>台股市場走勢與累積頻寬分佈儀表板</h1>
+        <div class="subtitle">基準日期：2026-10-08 | 點選下方週期可動態切換各統計區間圓餅圖</div>
+
+        <div class="period-selector">
+            <button class="period-btn active" onclick="switchPeriod('day1')">20261008 (單日)</button>
+            <button class="period-btn" onclick="switchPeriod('days3')">近 3 日</button>
+            <button class="period-btn" onclick="switchPeriod('days5')">近 5 日</button>
+            <button class="period-btn" onclick="switchPeriod('days10')">近 10 日</button>
+            <button class="period-btn" onclick="switchPeriod('days15')">近 15 日</button>
+            <button class="period-btn" onclick="switchPeriod('days20')">近 20 日</button>
+            <button class="period-btn" onclick="switchPeriod('days30')">近 30 日</button>
+        </div>
+
+        <div class="charts-grid">
+            <div class="chart-card">
+                <h3 id="mainChartTitle">市場整體漲跌分佈 (上漲 / 下跌 / 持平)</h3>
+                <div class="canvas-container">
+                    <canvas id="mainPieChart"></canvas>
+                </div>
+            </div>
+            <div class="chart-card">
+                <h3 id="subChartTitle">極端行情分佈 (漲停 / 跌停)</h3>
+                <div class="canvas-container">
+                    <canvas id="subPieChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="stats-summary" id="statsContainer">
+            <!-- 動態填入統計卡片 -->
+        </div>
+    </div>
+
+    <script>
+        const datasetData = {
+            day1: {
+                title: "20261008 (單日)",
+                subtitle: "總統計股票數：1,380 支",
+                mainLabels: ['上漲', '下跌', '持平'],
+                mainData: [204, 334, 842],
+                mainRaw: ["204 支 (14.78%)", "334 支 (24.20%)", "842 支 (61.01%)"],
+                subLabels: ['漲停', '跌停', '其他'],
+                subData: [13, 2, 1365],
+                subRaw: ["13 支 (0.94%)", "2 支 (0.14%)", "1,365 支 (98.91%)"],
+                summary: [
+                    { title: "上漲家數 (含漲停)", val: "204 支 (14.78%)", cls: "up" },
+                    { title: "下跌家數 (含跌停)", val: "334 支 (24.20%)", cls: "down" },
+                    { title: "持平家數", val: "842 支 (61.01%)", cls: "flat" },
+                    { title: "漲停 / 跌停數", val: "13支 / 2支", cls: "up" }
+                ]
+            },
+            days3: {
+                title: "20261006 ~ 20261008 (近3日)",
+                subtitle: "累積區間統計數據",
+                mainLabels: ['累積上漲', '累積下跌', '累積持平'],
+                mainData: [1829, 1860, 412],
+                mainRaw: ["1,829 次 (27.06%)", "1,860 次 (39.41%)", "412 次 (33.01%)"],
+                subLabels: ['累積漲停', '累積跌停'],
+                subData: [32, 8],
+                subRaw: ["32 次 (40.62%)", "8 次 (25.00%)"],
+                summary: [
+                    { title: "累積上漲占比", val: "495 / 1829 = 27.06%", cls: "up" },
+                    { title: "累積下跌占比", val: "733 / 1860 = 39.41%", cls: "down" },
+                    { title: "累積持平占比", val: "136 / 412 = 33.01%", cls: "flat" },
+                    { title: "漲停 / 跌停占比", val: "40.62% / 25.00%", cls: "up" }
+                ]
+            },
+            days5: {
+                title: "20261002 ~ 20261008 (近5日)",
+                subtitle: "累積區間統計數據",
+                mainLabels: ['累積上漲', '累積下跌', '累積持平'],
+                mainData: [2953, 3241, 655],
+                mainRaw: ["2,953 次 (16.76%)", "3,241 次 (22.62%)", "655 次 (20.76%)"],
+                subLabels: ['累積漲停', '累積跌停'],
+                subData: [76, 9],
+                subRaw: ["76 次 (17.11%)", "9 次 (22.22%)"],
+                summary: [
+                    { title: "累積上漲占比", val: "495 / 2953 = 16.76%", cls: "up" },
+                    { title: "累積下跌占比", val: "733 / 3241 = 22.62%", cls: "down" },
+                    { title: "累積持平占比", val: "136 / 655 = 20.76%", cls: "flat" },
+                    { title: "漲停 / 跌停占比", val: "17.11% / 22.22%", cls: "up" }
+                ]
+            },
+            days10: {
+                title: "20260923 ~ 20261008 (近10日)",
+                subtitle: "累積區間統計數據",
+                mainLabels: ['累積上漲', '累積下跌', '累積持平'],
+                mainData: [6026, 6315, 1354],
+                mainRaw: ["6,026 次 (8.21%)", "6,315 次 (11.61%)", "1,354 次 (10.04%)"],
+                subLabels: ['累積漲停', '累積跌停'],
+                subData: [174, 12],
+                subRaw: ["174 次 (7.47%)", "12 次 (16.67%)"],
+                summary: [
+                    { title: "累積上漲占比", val: "495 / 6026 = 8.21%", cls: "up" },
+                    { title: "累積下跌占比", val: "733 / 6315 = 11.61%", cls: "down" },
+                    { title: "累積持平占比", val: "136 / 1354 = 10.04%", cls: "flat" },
+                    { title: "漲停 / 跌停占比", val: "7.47% / 16.67%", cls: "up" }
+                ]
+            },
+            days15: {
+                title: "20260916 ~ 20261008 (近15日)",
+                subtitle: "累積區間統計數據",
+                mainLabels: ['累積上漲', '累積下跌', '累積持平'],
+                mainData: [10011, 8524, 2007],
+                mainRaw: ["10,011 次 (4.94%)", "8,524 次 (8.60%)", "2,007 次 (6.78%)"],
+                subLabels: ['累積漲停', '累積跌停'],
+                subData: [291, 16],
+                subRaw: ["291 次 (4.47%)", "16 次 (12.50%)"],
+                summary: [
+                    { title: "累積上漲占比", val: "495 / 10011 = 4.94%", cls: "up" },
+                    { title: "累積下跌占比", val: "733 / 8524 = 8.60%", cls: "down" },
+                    { title: "累積持平占比", val: "136 / 2007 = 6.78%", cls: "flat" },
+                    { title: "漲停 / 跌停占比", val: "4.47% / 12.50%", cls: "up" }
+                ]
+            },
+            days20: {
+                title: "20260909 ~ 20261008 (近20日)",
+                subtitle: "累積區間統計數據",
+                mainLabels: ['累積上漲', '累積下跌', '累積持平'],
+                mainData: [12070, 12741, 2568],
+                mainRaw: ["12,070 次 (4.10%)", "12,741 次 (5.75%)", "2,568 次 (5.30%)"],
+                subLabels: ['累積漲停', '累積跌停'],
+                subData: [331, 29],
+                subRaw: ["331 次 (3.93%)", "29 次 (6.90%)"],
+                summary: [
+                    { title: "累積上漲占比", val: "495 / 12070 = 4.10%", cls: "up" },
+                    { title: "累積下跌占比", val: "733 / 12741 = 5.75%", cls: "down" },
+                    { title: "累積持平占比", val: "136 / 2568 = 5.30%", cls: "flat" },
+                    { title: "漲停 / 跌停占比", val: "3.93% / 6.90%", cls: "up" }
+                ]
+            },
+            days30: {
+                title: "20260826 ~ 20261008 (近30日)",
+                subtitle: "累積區間統計數據",
+                mainLabels: ['累積上漲', '累積下跌', '累積持平'],
+                mainData: [18063, 19102, 3887],
+                mainRaw: ["18,063 次 (2.74%)", "19,102 次 (3.84%)", "3,887 次 (3.50%)"],
+                subLabels: ['累積漲停', '累積跌停'],
+                subData: [464, 53],
+                subRaw: ["464 次 (2.80%)", "53 次 (3.77%)"],
+                summary: [
+                    { title: "累積上漲占比", val: "495 / 18063 = 2.74%", cls: "up" },
+                    { title: "累積下跌占比", val: "733 / 19102 = 3.84%", cls: "down" },
+                    { title: "累積持平占比", val: "136 / 3887 = 3.50%", cls: "flat" },
+                    { title: "漲停 / 跌停占比", val: "2.80% / 3.77%", cls: "up" }
+                ]
+            }
+        };
+
+        let mainChart, subChart;
+
+        function initCharts() {
+            const ctxMain = document.getElementById('mainPieChart').getContext('2d');
+            mainChart = new Chart(ctxMain, {
+                type: 'pie',
+                data: {
+                    labels: datasetData.day1.mainLabels,
+                    datasets: [{
+                        data: datasetData.day1.mainData,
+                        backgroundColor: ['#e03131', '#2b8a3e', '#ced4da'],
+                        borderColor: '#ffffff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            const ctxSub = document.getElementById('subPieChart').getContext('2d');
+            subChart = new Chart(ctxSub, {
+                type: 'pie',
+                data: {
+                    labels: datasetData.day1.subLabels,
+                    datasets: [{
+                        data: datasetData.day1.subData,
+                        backgroundColor: ['#f03e3e', '#37b24d', '#e9ecef'],
+                        borderColor: '#ffffff',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
+                }
+            });
+
+            updateSummary('day1');
+        }
+
+        function switchPeriod(key) {
+            // 更新按鈕狀態
+            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            const data = datasetData[key];
+
+            // 更新標題
+            document.getElementById('mainChartTitle').innerText = data.title + " - 市場整體分佈";
+            document.getElementById('subChartTitle').innerText = data.title + " - 極端行情分佈";
+
+            // 更新主圖表
+            mainChart.data.labels = data.mainLabels;
+            mainChart.data.datasets[0].data = data.mainData;
+            mainChart.update();
+
+            // 更新副圖表
+            subChart.data.labels = data.subLabels;
+            subChart.data.datasets[0].data = data.subData;
+            subChart.update();
+
+            // 更新下方摘要卡片
+            updateSummary(key);
+        }
+
+        function updateSummary(key) {
+            const data = datasetData[key];
+            const container = document.getElementById('statsContainer');
+            container.innerHTML = '';
+            data.summary.forEach(item => {
+                const box = document.createElement('div');
+                box.className = `stat-box ${item.cls}`;
+                box.innerHTML = `<h4>${item.title}</h4><p>${item.val}</p>`;
+                container.appendChild(box);
+            });
+        }
+
+        window.onload = initCharts;
+    </script>
+</body>
+</html>
+"""
+
+with open("261011_market_trend_dashboard.html", "w", encoding="utf-8") as f:
+    f.write(html_content)
+print("Dashboard HTML created successfully.")

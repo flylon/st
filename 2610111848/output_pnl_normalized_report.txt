@@ -1,0 +1,429 @@
+def output_pnl_normalized_report(self):
+        """輸出全部股票賺賠排名與 Min-Max 正規化分數報告（console + txt）。"""
+        print_both("output_pnl_normalized_report()")
+        # stock_price_change_dict(字典)：儲存每支股票名稱 → 漲跌價（元，有正負號，例如 5.0 代表上漲 5 元，-3.0 代表下跌 3 元）
+        # stock_raw_dict(字典)：儲存每支股票名稱 → 原始資料列表，供後續印出代號、收盤價、開盤價等詳細欄位
+        if not self.stock_price_change_dict or not self.stock_raw_dict:
+            self._pnl_normalized_report_cache = None
+            return
+
+        top_n = max(0, int(getattr(self, 'PNL_REPORT_TOP_N', 15))) #全部股票賺賠排名:前n名
+        bottom_n = max(0, int(getattr(self, 'PNL_REPORT_BOTTOM_N', 10))) # 全部股票賺賠排名：後N名
+        lookback_days = max(60, int(getattr(self, 'PNL_REPORT_LOOKBACK_DAYS', 80)))  #賺賠排名報告計算技術欄位回看交易日數
+        market_label = "【上市】" if str(self._table_name) == 'stock_daily' else "【上櫃】"
+        report_date = get_taiwan_time().strftime('%Y/%m/%d')
+
+        def _to_float(v, default=0.0):
+            return self._safe_float(v, default)
+
+        def _to_num_str(v, digits=2):
+            try:
+                return f"{float(v):.{digits}f}"
+            except Exception:
+                return "--"
+
+        def _parse_json_obj(raw):
+            if not raw:
+                return {}
+            if isinstance(raw, dict):
+                return raw
+            try:
+                txt = str(raw).strip()
+                return json.loads(txt) if txt.startswith('{') else {}
+            except Exception:
+                return {}
+
+        def _sum_recent(rows, key, n):
+            s = 0.0
+            for r in rows[:n]:
+                s += _to_float(r.get(key), 0.0)
+            return s
+
+        def _avg_close(rows, n):
+            vals = [_to_float(r.get('close_price'), 0.0) for r in rows[:n]]
+            vals = [v for v in vals if v > 0]
+            return (sum(vals) / len(vals)) if vals else None
+
+        def _limit_count(rows, n, up=True):
+            cnt = 0
+            for r in rows[:n]:
+                close_v = _to_float(r.get('close_price'), 0.0)
+                chg_v = _to_float(r.get('change'), 0.0)
+                prev_close = close_v - chg_v
+                if prev_close == 0:
+                    continue
+                pct = (chg_v / prev_close) * 100.0
+                if up and pct >= 9.5:
+                    cnt += 1
+                if (not up) and pct <= -9.5:
+                    cnt += 1
+            return cnt
+
+        def _wr(rows, n):
+            if len(rows) < n:
+                return None
+            highs = [_to_float(r.get('high_price'), 0.0) for r in rows[:n]]
+            lows = [_to_float(r.get('low_price'), 0.0) for r in rows[:n]]
+            close_now = _to_float(rows[0].get('close_price'), 0.0)
+            h = max(highs) if highs else 0.0
+            l = min(lows) if lows else 0.0
+            if h == l:
+                return None
+            return (h - close_now) / (h - l) * -100.0
+
+        def _kdj_j(rows, period):
+            if len(rows) < period:
+                return None
+            ordered = list(reversed(rows))
+            highs = [_to_float(r.get('high_price'), 0.0) for r in ordered]
+            lows = [_to_float(r.get('low_price'), 0.0) for r in ordered]
+            closes = [_to_float(r.get('close_price'), 0.0) for r in ordered]
+            k = 50.0
+            d = 50.0
+            for i in range(period - 1, len(ordered)):
+                hh = max(highs[i - period + 1:i + 1])
+                ll = min(lows[i - period + 1:i + 1])
+                c = closes[i]
+                rsv = 50.0 if hh == ll else (c - ll) / (hh - ll) * 100.0
+                k = (2.0 / 3.0) * k + (1.0 / 3.0) * rsv
+                d = (2.0 / 3.0) * d + (1.0 / 3.0) * k
+            return 3 * k - 2 * d
+
+        def _macd(closes_new_to_old):
+            closes = list(reversed([v for v in closes_new_to_old if v > 0]))
+            if len(closes) < 26:
+                return None, None, None
+
+            def _ema_series(vals, period):
+                alpha = 2.0 / (period + 1.0)
+                out = []
+                ema = vals[0]
+                for v in vals:
+                    ema = alpha * v + (1 - alpha) * ema
+                    out.append(ema)
+                return out
+
+            ema12 = _ema_series(closes, 12)
+            ema26 = _ema_series(closes, 26)
+            dif_series = [a - b for a, b in zip(ema12, ema26)]
+            dea_series = _ema_series(dif_series, 9)
+            dif = dif_series[-1]
+            dea = dea_series[-1]
+            osc = dif - dea
+            return dif, dea, osc
+
+        try:
+            conn = sqlite3.connect(self.db_name)
+            cursor = conn.cursor()
+            # 先抓最近 N 個交易日，後續所有技術欄位統計都只用這個日期範圍。
+            # 1. 僅用於印出除錯的 SQL 字串
+            debug_sql = f"SELECT DISTINCT date FROM {self._table_name} ORDER BY date DESC LIMIT {lookback_days}"
+            print_both("[Debug SQL]:{debug_sql}")
+            cursor.execute(
+                f"SELECT DISTINCT date FROM {self._table_name} ORDER BY date DESC LIMIT ?",
+                (lookback_days,)
+            )
+            date_rows = [r[0] for r in cursor.fetchall()]
+            if not date_rows:
+                conn.close()
+                self._pnl_normalized_report_cache = None
+                return
+
+            # 1. 將 date_rows 內的日期加上單引號，用於 debug 印出
+            formatted_params = ','.join(f"'{d}'" for d in date_rows)
+
+            # 2. 僅用於印出除錯的 SQL 字串
+            debug_sql = f"""
+            SELECT date, code, name, close_price, change, foreign_inv, trade_volume,
+                m_ma, s_rsi, s_kdj, s_macd, high_price, low_price
+            FROM {self._table_name}
+            WHERE date IN ({formatted_params})
+            ORDER BY code, date DESC
+            """
+            print_both("[Debug SQL]:{debug_sql}")
+
+
+            # 依日期清單回撈各股票歷史資料；用參數化占位符避免手動拼接日期值。
+            placeholders = ','.join('?' * len(date_rows))
+            cursor.execute(
+                f"""
+                SELECT date, code, name, close_price, change, foreign_inv, trade_volume,
+                       m_ma, s_rsi, s_kdj, s_macd, high_price, low_price
+                FROM {self._table_name}
+                WHERE date IN ({placeholders})
+                ORDER BY code, date DESC
+                """,
+                date_rows
+            )
+            raw_hist = cursor.fetchall()
+            conn.close()
+        except Exception as e:
+            print_both(f"ERR:⚠️ 產生賺賠排名報告時查詢資料庫失敗: {e}")
+            self._pnl_normalized_report_cache = None
+            return
+
+        # 將同一代號的多日資料聚合，供後面計算 MA/RSI/KDJ/MACD/WR 與近 N 日統計使用。
+        hist_by_code = {}
+        for row in raw_hist:
+            (d, code, name, close_price, change, foreign_inv, trade_volume,
+             m_ma, s_rsi, s_kdj, s_macd, high_price, low_price) = row
+            hist_by_code.setdefault(str(code), []).append({
+                'date': d,
+                'name': name,
+                'close_price': close_price,
+                'change': change,
+                'foreign_inv': foreign_inv,
+                'trade_volume': trade_volume,
+                'm_ma': m_ma,
+                's_rsi': s_rsi,
+                's_kdj': s_kdj,
+                's_macd': s_macd,
+                'high_price': high_price,
+                'low_price': low_price,
+            })
+
+        base_records = []
+        # 將當日已抓到的原始資料整理成基礎清單（代號/名稱/當日賺賠/收盤價）。
+        for name, pnl in self.stock_price_change_dict.items():
+            raw = self.stock_raw_dict.get(name, [])
+            if len(raw) < 8:
+                continue
+            code = str(raw[0]).strip()
+            if not code:
+                continue
+            close_now = _to_float(raw[7], 0.0)
+            base_records.append({
+                'name': str(name),
+                'code': code,
+                'pnl': float(pnl),
+                'close_now': close_now,
+            })
+
+        if not base_records:
+            self._pnl_normalized_report_cache = None
+            return
+
+        # Min-Max 正規化分母使用全體賺賠區間，後續換算為 0~100% 分數。
+        pnl_vals = [r['pnl'] for r in base_records]
+        min_pnl = min(pnl_vals)
+        max_pnl = max(pnl_vals)
+        pnl_range = max_pnl - min_pnl
+
+        enriched = []
+        # 逐檔補齊歷史衍生欄位（漲跌停次數、外資/量能累加、MA/RSI/KDJ/MACD/WR）。
+        for r in base_records:
+            code = r['code']
+            rows = hist_by_code.get(code, [])
+            latest = rows[0] if rows else {}
+
+            rsi_obj = _parse_json_obj(latest.get('s_rsi'))
+            ma_obj = _parse_json_obj(latest.get('m_ma'))
+            macd_obj = _parse_json_obj(latest.get('s_macd'))
+
+            closes = [_to_float(x.get('close_price'), 0.0) for x in rows]
+            dif, dea, osc = _macd(closes)
+            if macd_obj:
+                dif = _to_float(macd_obj.get('dif'), dif if dif is not None else 0.0)
+                dea = _to_float(macd_obj.get('dem'), dea if dea is not None else 0.0)
+                osc = _to_float(macd_obj.get('osc'), osc if osc is not None else 0.0)
+
+            # 分數越高代表當日賺賠在全體中的相對位置越前。
+            score = ((r['pnl'] - min_pnl) / pnl_range) if pnl_range != 0 else 0.0
+            enriched.append({
+                'name_code': f"{r['name']}({code})",
+                'code': code,
+                'pnl': r['pnl'],
+                'score': score,
+                'close_now': r['close_now'],
+                'up5': _limit_count(rows, 5, up=True),
+                'up10': _limit_count(rows, 10, up=True),
+                'up20': _limit_count(rows, 20, up=True),
+                'up30': _limit_count(rows, 30, up=True),
+                'dn5': _limit_count(rows, 5, up=False),
+                'dn10': _limit_count(rows, 10, up=False),
+                'dn20': _limit_count(rows, 20, up=False),
+                'dn30': _limit_count(rows, 30, up=False),
+                'fi5': _sum_recent(rows, 'foreign_inv', 5),
+                'fi10': _sum_recent(rows, 'foreign_inv', 10),
+                'fi15': _sum_recent(rows, 'foreign_inv', 15),
+                'vol5': _sum_recent(rows, 'trade_volume', 5),
+                'vol10': _sum_recent(rows, 'trade_volume', 10),
+                'vol15': _sum_recent(rows, 'trade_volume', 15),
+                'ma5': _to_float(ma_obj.get('ma5'), _avg_close(rows, 5) or 0.0),
+                'ma10': _to_float(ma_obj.get('ma10'), _avg_close(rows, 10) or 0.0),
+                'ma20': _to_float(ma_obj.get('ma20'), _avg_close(rows, 20) or 0.0),
+                'ma60': _to_float(ma_obj.get('ma60'), _avg_close(rows, 60) or 0.0),
+                'rsi6': _to_float(rsi_obj.get('rsi6'), 0.0),
+                'rsi12': _to_float(rsi_obj.get('rsi12'), 0.0),
+                'rsi24': _to_float(rsi_obj.get('rsi24'), 0.0),
+                'j6': _kdj_j(rows, 6) or 0.0,
+                'j12': _kdj_j(rows, 12) or 0.0,
+                'j24': _kdj_j(rows, 24) or 0.0,
+                'macd12_26': dif if dif is not None else 0.0,
+                'macd26_12': dea if dea is not None else 0.0,
+                'macd_diff': osc if osc is not None else 0.0,
+                'wr6': _wr(rows, 6) or 0.0,
+                'wr12': _wr(rows, 12) or 0.0,
+                'wr24': _wr(rows, 24) or 0.0,
+            })
+
+        if not enriched:
+            self._pnl_normalized_report_cache = None
+            return
+
+        # 一份資料做兩種排序：由高到低取前段、由低到高取後段。
+        ranked_desc = sorted(enriched, key=lambda x: x['pnl'], reverse=True)
+        rank_map = {r['code']: i + 1 for i, r in enumerate(ranked_desc)}
+        tail_src = sorted(enriched, key=lambda x: x['pnl'])
+
+        top_rows = ranked_desc[:top_n] if top_n > 0 else []
+        bottom_rows = tail_src[:bottom_n] if bottom_n > 0 else []
+
+        selected = []
+        seen = set()
+        # 合併前N與後N時去重，避免同一檔同時落在兩端區間而重複顯示。
+        for row in top_rows + bottom_rows:
+            if row['code'] in seen:
+                continue
+            seen.add(row['code'])
+            selected.append(row)
+
+        headers = [
+            '排名', '股名(代號)', '賺賠', 'Min-Max 正規化分數', '收盤價',
+            '近5日漲停次數', '近10日漲停次數', '近20日漲停次數', '近30日漲停次數',
+            '近5日跌停次數', '近10日跌停次數', '近20日跌停次數', '近30日跌停次數',
+            '5日外資', '10日外資', '15日外資',
+            '5日成交量', '10日成交量', '15日成交量',
+            '5日均線', '10日均線', '20日均線', '60日均線',
+            'RSI6', 'RSI12', 'RSI24',
+            'KDJ.j6', 'KDJ.j12', 'KDJ.j24',
+            'MACD12_26', 'MACD26_12', 'MACD_diff12_26',
+            'WR6', 'WR12', 'WR24'
+        ]
+
+        table_rows = []
+        # 轉成最終輸出字串格式，供 console/html/txt 三種通路共用。
+        for row in selected:
+            table_rows.append([
+                str(rank_map.get(row['code'], '--')),
+                row['name_code'],
+                f"{row['pnl']:+.2f}",
+                f"{row['score'] * 100:.2f}%",
+                _to_num_str(row['close_now']),
+                str(row['up5']), str(row['up10']), str(row['up20']), str(row['up30']),
+                str(row['dn5']), str(row['dn10']), str(row['dn20']), str(row['dn30']),
+                _to_num_str(row['fi5']), _to_num_str(row['fi10']), _to_num_str(row['fi15']),
+                _to_num_str(row['vol5'], 0), _to_num_str(row['vol10'], 0), _to_num_str(row['vol15'], 0),
+                _to_num_str(row['ma5']), _to_num_str(row['ma10']), _to_num_str(row['ma20']),
+                _to_num_str(row['ma60']),
+                _to_num_str(row['rsi6']), _to_num_str(row['rsi12']), _to_num_str(row['rsi24']),
+                _to_num_str(row['j6']), _to_num_str(row['j12']), _to_num_str(row['j24']),
+                _to_num_str(row['macd12_26']), _to_num_str(row['macd26_12']), _to_num_str(row['macd_diff']),
+                _to_num_str(row['wr6']), _to_num_str(row['wr12']), _to_num_str(row['wr24'])
+            ])
+
+        # 標題起始日：由回看交易日清單取最早日期（即從報告日往前 lookback_days 的交易日範圍起點）。
+        try:
+            start_date_display = datetime.strptime(str(date_rows[-1]), "%Y%m%d").strftime("%Y/%m/%d")
+        except Exception:
+            start_date_display = report_date
+
+        title = (
+            f"{report_date}當日的{market_label}全部股票賺賠排名與正規化分數占比統計報告(Min-Max正規化分數)"
+            f"(共回頭抓{lookback_days}個交易日({start_date_display}~{report_date})的漲跌次數、外資、量能累加、MA/RSI/KDJ/MACD/WR 等)"
+        )
+
+        title += f"\n請依成交量、股價、rsi,kdj,macd, wr..等任何數據進行分析並預測,在1-2個交易日內,股價持續上升機率高,易漲難跌,高CP值,的賺錢股票\n";
+        # 全體賺賠合計保留於快取，供後續輸出與寄信流程重用。
+        total_pnl = sum(r['pnl'] for r in enriched)
+        table_text = self._build_v17_text_str(headers, table_rows)
+
+        roi_records = []
+        for row in selected:
+            roi_records.append({
+                'code': row['code'],
+                'name': row['name_code'].rsplit('(', 1)[0] if '(' in row['name_code'] and row['name_code'].endswith(')') else row['name_code'],
+                'pnl': row['pnl'],
+                'score': row['score'],
+                'close_now': row['close_now'],
+                'up5': row['up5'],
+                'up10': row['up10'],
+                'up20': row['up20'],
+                'up30': row['up30'],
+                'dn5': row['dn5'],
+                'dn10': row['dn10'],
+                'dn20': row['dn20'],
+                'dn30': row['dn30'],
+                'fi5': row['fi5'],
+                'fi10': row['fi10'],
+                'fi15': row['fi15'],
+                'vol5': row['vol5'],
+                'vol10': row['vol10'],
+                'vol15': row['vol15'],
+                'ma5': row['ma5'],
+                'ma10': row['ma10'],
+                'ma20': row['ma20'],
+                'ma60': row['ma60'],
+                'rsi6': row['rsi6'],
+                'rsi12': row['rsi12'],
+                'rsi24': row['rsi24'],
+                'rank': rank_map.get(row['code'], 0),
+            })
+        self.json_helper(roi_records, storage_key='roi', sort_key=lambda x: (-float(x.get('pnl', 0.0) or 0.0), x.get('code', '')))
+
+        self._pnl_normalized_report_cache = {
+            'title': title,
+            'headers': headers,
+            'rows': table_rows,
+            'top_n': top_n,
+            'bottom_n': bottom_n,
+            'total_pnl': total_pnl,
+        }
+
+        print("\n" + "=" * 110)
+        print(title)
+        print(f"顯示前{top_n}名與後{bottom_n}名（可由 PNL_REPORT_TOP_N / PNL_REPORT_BOTTOM_N 調整）")
+        print(f"總計全部賺賠,{total_pnl:.2f}")
+
+        if is_colab():
+            try:
+                from IPython.display import display as _ipy_display, HTML as _HTML
+                _ipy_display(_HTML(f"<h4 style='margin:8px 0'>{title}</h4>" + self._build_v17_html_table(headers, table_rows)))
+            except Exception:
+                pass
+        try:
+            # 仍輸出文字表到 stdout，讓既有 s00/q00 捕捉邏輯可寫入 txt
+            roi_fieldnames = [  # 固定 CSV 欄位順序，確保每次輸出的表頭與資料排列一致。
+                'code', 'name', 'pnl', 'score', 'close_now',  # 輸出股票代號、名稱、賺賠、分數與目前收盤價。
+                'up5', 'up10', 'up20', 'up30',  # 輸出各期間內的漲停次數，供強勢程度比較。
+                'dn5', 'dn10', 'dn20', 'dn30',  # 輸出各期間內的跌停次數，供風險程度比較。
+                'fi5', 'fi10', 'fi15',  # 輸出外資在不同期間的累計買賣超資料。
+                'vol5', 'vol10', 'vol15',  # 輸出不同期間的成交量資料，呈現量能變化。
+                'ma5', 'ma10', 'ma20', 'ma60',  # 輸出短、中、長期均線，供趨勢判讀。
+                'rsi6', 'rsi12', 'rsi24', 'rank',  # 輸出 RSI 指標與賺賠排名，完成最後欄位。
+            ]  # 結束 CSV 欄位定義。
+            csv_output = io.StringIO()  # 建立記憶體文字緩衝區，避免先寫入實體檔案。
+            csv_writer = csv.DictWriter(csv_output, fieldnames=roi_fieldnames)  # 建立依指定欄位輸出 dict 的 CSV 寫入器。
+            csv_writer.writeheader()  # 將欄位名稱寫成 CSV 第一列表頭。
+            csv_writer.writerows(roi_records)  # 將 roi_records 的每筆股票資料依欄位順序寫入。
+            csv_text = csv_output.getvalue()  # 取出完整 CSV 字串並存入指定的 csv_text 變數。
+            print(csv_text, end='')  # 印出 CSV 內容，且不額外增加空白行。
+            #print(table_text)
+    
+            # 1. 自訂您的路徑與檔名
+            market_code = 'q' if str(table_name) == 'otc_stock_daily' else 's'
+            csv_filename = f'{market_code}09_pnl_normalized_report_{datetime.now().strftime("%Y%m%d")}.txt'  # 檔名
+            log_dir = _os.getcwd()
+            os.makedirs(log_dir, exist_ok=True)
+            csv_path = _os.path.join(log_dir, csv_filename)
+            # 2. 修改此處：改用 open() 開啟實體檔案，並指定 utf-8-sig 編碼（確保 Excel 開啟不亂碼）
+            with open(csv_path, mode='w', encoding='utf-8-sig', newline='') as csv_file:
+                csv_writer = csv.DictWriter(csv_file, fieldnames=roi_fieldnames)
+                csv_writer.writeheader()        # 寫入表頭
+                csv_writer.writerows(roi_records) # 寫入資料
+            # 提示寫檔完成
+            print_both(f"output_pnl_normalized_report 檔案已成功寫入至：{csv_path}")
+        except Exception as e:
+            print_both(f"ERR:⚠️ 輸出 CSV 檔案時發生錯誤，請檢查檔案路徑與權限。{e}")
+            pass
+        print_both(f"output_pnl_normalized_report() 完成，總計 {len(selected)} 檔股票資料已輸出。")
