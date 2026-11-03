@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>261103_市場多空累計演進分析儀表板</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+    body {
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    /* 自訂滾動條 */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-slate-200 min-h-screen p-3 md:p-6 lg:p-8 selection:bg-red-900 selection:text-red-100">
+
+  <!-- 頂部導航與標題列 -->
+  <header class="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-800/80 pb-5">
+    <div>
+      <div class="flex items-center gap-3">
+        <div class="p-2.5 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 flex items-center justify-center shadow-lg shadow-red-950/40">
+          <i data-lucide="trending-up" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl md:text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+              261103_市場多空累計演進分析儀表板
+            </h1>
+            <span class="px-2.5 py-0.5 text-xs font-semibold rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">即時演算</span>
+          </div>
+          <p class="text-xs md:text-sm text-slate-400 mt-1">
+            基準結算日：<span class="text-slate-200 font-semibold">2026-11-02</span> ｜ 標的樣本總量：<span class="text-slate-200 font-semibold">1,389 檔</span> ｜ 台股慣例：<span class="text-red-400 font-medium">紅漲</span> / <span class="text-emerald-400 font-medium">綠跌</span>
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 狀態標籤與動能判斷 -->
+    <div class="flex items-center gap-3 self-start md:self-auto">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-sm">
+        <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+        <div>
+          <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">近3日短線多空評估</div>
+          <div class="text-sm font-bold text-red-400 flex items-center gap-1">
+            多方攻勢顯著 (多空佔比 2.33x)
+          </div>
+        </div>
+      </div>
+      <button onclick="window.print()" class="hidden sm:flex items-center gap-2 px-3 py-2.5 text-xs font-semibold rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 transition-colors">
+        <i data-lucide="printer" class="w-4 h-4"></i>
+        匯出/列印
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto space-y-6">
+
+    <!-- 1. 當日概況核心指標卡片 (20261102) -->
+    <section>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+          <i data-lucide="gauge" class="w-4 h-4 text-slate-400"></i>
+          當日盤面結構 (20261102 單日分佈)
+        </h2>
+        <span class="text-xs text-slate-500">前推交易天數 staticDays = 5</span>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
+        <!-- 上漲卡片 -->
+        <div class="bg-gradient-to-b from-red-950/20 to-slate-900/60 border border-red-900/30 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm">
+          <div class="absolute -right-4 -top-4 w-16 h-16 bg-red-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-red-300/80 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-red-500"></span> 上漲家數
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-red-500/15 text-red-400">18.14%</span>
+          </div>
+          <div class="mt-2.5 flex items-baseline gap-2">
+            <span class="text-2xl md:text-3xl font-extrabold text-red-400">252</span>
+            <span class="text-xs text-slate-500">/ 1,389</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div class="bg-red-500 h-full rounded-full" style="width: 18.14%"></div>
+          </div>
+        </div>
+
+        <!-- 下跌卡片 -->
+        <div class="bg-gradient-to-b from-emerald-950/20 to-slate-900/60 border border-emerald-900/30 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm">
+          <div class="absolute -right-4 -top-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl pointer-events-none"></div>
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-emerald-300/80 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 下跌家數
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">16.41%</span>
+          </div>
+          <div class="mt-2.5 flex items-baseline gap-2">
+            <span class="text-2xl md:text-3xl font-extrabold text-emerald-400">228</span>
+            <span class="text-xs text-slate-500">/ 1,389</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div class="bg-emerald-500 h-full rounded-full" style="width: 16.41%"></div>
+          </div>
+        </div>
+
+        <!-- 持平卡片 -->
+        <div class="bg-gradient-to-b from-slate-800/30 to-slate-900/60 border border-slate-700/50 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-slate-300/80 flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-slate-400"></span> 持平觀望
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-slate-700 text-slate-300">65.44%</span>
+          </div>
+          <div class="mt-2.5 flex items-baseline gap-2">
+            <span class="text-2xl md:text-3xl font-extrabold text-slate-200">909</span>
+            <span class="text-xs text-slate-500">/ 1,389</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div class="bg-slate-400 h-full rounded-full" style="width: 65.44%"></div>
+          </div>
+        </div>
+
+        <!-- 漲停卡片 -->
+        <div class="bg-gradient-to-b from-red-950/40 to-slate-900/70 border border-red-500/40 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-red-200 flex items-center gap-1.5">
+              <i data-lucide="flame" class="w-3.5 h-3.5 text-red-400"></i> 強勢漲停
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-red-600 text-white">0.72%</span>
+          </div>
+          <div class="mt-2.5 flex items-baseline gap-2">
+            <span class="text-2xl md:text-3xl font-extrabold text-red-300">10 <span class="text-sm font-normal text-slate-400">支</span></span>
+            <span class="text-xs text-red-400/80 font-mono">2:1 壓倒跌停</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div class="bg-red-400 h-full rounded-full" style="width: 14%"></div>
+          </div>
+        </div>
+
+        <!-- 跌停卡片 -->
+        <div class="bg-gradient-to-b from-emerald-950/40 to-slate-900/70 border border-emerald-500/40 rounded-2xl p-4 relative overflow-hidden backdrop-blur-sm col-span-2 sm:col-span-1">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-medium text-emerald-200 flex items-center gap-1.5">
+              <i data-lucide="arrow-down-circle" class="w-3.5 h-3.5 text-emerald-400"></i> 弱勢跌停
+            </span>
+            <span class="text-xs font-bold px-2 py-0.5 rounded bg-emerald-600 text-white">0.36%</span>
+          </div>
+          <div class="mt-2.5 flex items-baseline gap-2">
+            <span class="text-2xl md:text-3xl font-extrabold text-emerald-300">5 <span class="text-sm font-normal text-slate-400">支</span></span>
+            <span class="text-xs text-emerald-400/80 font-mono">賣壓低檔可控</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full mt-3 overflow-hidden">
+            <div class="bg-emerald-400 h-full rounded-full" style="width: 7%"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 深度分析核心觀點條 (Key Takeaway Pill Bar) -->
+    <section class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 md:p-5">
+      <div class="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="p-2 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-400 shrink-0">
+            <i data-lucide="lightbulb" class="w-5 h-5"></i>
+          </div>
+          <div class="text-xs md:text-sm text-slate-300 leading-relaxed">
+            <span class="text-amber-300 font-bold">【演進解讀】短多動能爆發 vs 長線籌碼收斂：</span>
+            近3日當日上漲佔比高達 <span class="text-red-400 font-bold">55.27%</span>（對照下跌佔比僅 23.70%），且漲停佔比衝至 <span class="text-red-400 font-bold">50.00%</span>，顯示極強短線多方攻擊。隨觀測天期拉長至30日，上漲佔比自 55.3% 收斂至 3.31%，累積下跌基數（19,685次）仍大於累積上漲（17,609次），反映市場正處於「中長線空方架構下的極速波段反彈期」。
+          </div>
+        </div>
+        <div class="flex items-center gap-2 shrink-0 self-end lg:self-center">
+          <span class="text-[11px] text-slate-400 font-medium bg-slate-800 px-3 py-1.5 rounded-lg border border-slate-700">
+            30D 多空比: <strong class="text-slate-200">0.89 : 1</strong>
+          </span>
+          <span class="text-[11px] text-red-300 font-medium bg-red-950/60 border border-red-800/60 px-3 py-1.5 rounded-lg">
+            3D 攻擊比: <strong class="text-red-400">2.33 : 1</strong>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 圖表展示區 (雙核心圖表 + 互動按鈕) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+      <!-- 左側：多天期當日佔比衰減趨勢圖 (7 Cols) -->
+      <div class="lg:col-span-7 bg-slate-900/70 border border-slate-800 rounded-2xl p-4 md:p-6 flex flex-col justify-between shadow-xl">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-base font-bold text-white flex items-center gap-2">
+                <i data-lucide="line-chart" class="w-4 h-4 text-red-400"></i>
+                各週期動能佔比演進曲線 (當日 / 累積)
+              </h3>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">觀測 3日 ➔ 30日 佔比收斂速率，掌握短期強攻何時淡化</p>
+          </div>
+          <!-- 切換模式 -->
+          <div class="inline-flex p-1 bg-slate-800 rounded-xl text-xs font-medium text-slate-400 self-start sm:self-auto border border-slate-700/60">
+            <button id="btnTrendAll" onclick="setTrendFilter('all')" class="px-2.5 py-1 rounded-lg bg-red-600 text-white font-semibold shadow transition-all">全顯示</button>
+            <button id="btnTrendMain" onclick="setTrendFilter('main')" class="px-2.5 py-1 rounded-lg hover:text-slate-200 transition-all">僅漲跌</button>
+            <button id="btnTrendLimit" onclick="setTrendFilter('limit')" class="px-2.5 py-1 rounded-lg hover:text-slate-200 transition-all">僅漲跌停</button>
+          </div>
+        </div>
+
+        <div class="relative w-full h-[320px] md:h-[360px]">
+          <canvas id="trendChart"></canvas>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-red-500 inline-block"></span> 上漲佔比 (3D: 55.27% ➔ 30D: 3.31%)</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-emerald-500 inline-block"></span> 下跌佔比 (3D: 23.70% ➔ 30D: 3.26%)</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-amber-400 inline-block"></span> 漲停佔比 (3D: 50.00% ➔ 30D: 2.15%)</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-0.5 bg-cyan-400 inline-block"></span> 跌停佔比 (3D: 27.78% ➔ 30D: 6.41%)</span>
+        </div>
+      </div>
+
+      <!-- 右側：多天期累積股票總量量能比較 (5 Cols) -->
+      <div class="lg:col-span-5 bg-slate-900/70 border border-slate-800 rounded-2xl p-4 md:p-6 flex flex-col justify-between shadow-xl">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <i data-lucide="bar-chart-3" class="w-4 h-4 text-emerald-400"></i>
+              各天期累積總量量能結構
+            </h3>
+            <p class="text-xs text-slate-400 mt-0.5">各週期之「累積上漲」與「累積下跌」總檔次對比</p>
+          </div>
+          <span class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 text-slate-400 border border-slate-700 font-mono">
+            單位: 檔次
+          </span>
+        </div>
+
+        <div class="relative w-full h-[320px] md:h-[360px]">
+          <canvas id="volumeChart"></canvas>
+        </div>
+
+        <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-around text-xs text-slate-300">
+          <div class="text-center">
+            <span class="text-slate-500 block text-[10px]">30D 累計上漲</span>
+            <span class="text-red-400 font-bold font-mono text-sm">17,609</span>
+          </div>
+          <div class="w-px h-6 bg-slate-800"></div>
+          <div class="text-center">
+            <span class="text-slate-500 block text-[10px]">30D 累計下跌</span>
+            <span class="text-emerald-400 font-bold font-mono text-sm">19,685</span>
+          </div>
+          <div class="w-px h-6 bg-slate-800"></div>
+          <div class="text-center">
+            <span class="text-slate-500 block text-[10px]">長線淨差值 (空方勝)</span>
+            <span class="text-emerald-300 font-bold font-mono text-sm">-2,076</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 4. 詳細數據明細與矩陣對照表 -->
+    <section class="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 md:p-6 shadow-xl">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <i data-lucide="table" class="w-4 h-4 text-amber-400"></i>
+            多天期演進數據全景表
+          </h3>
+          <p class="text-xs text-slate-400">當日各類別數值相對於各區間累積總量之精確比例分析</p>
+        </div>
+        <div class="text-xs text-slate-400 flex items-center gap-3">
+          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-red-500"></span> 當日分母基準：582漲 / 641跌 / 150平</span>
+          <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-400"></span> 10漲停 / 5跌停</span>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs md:text-sm border-collapse">
+          <thead>
+            <tr class="border-b border-slate-800 bg-slate-800/40 text-slate-400 text-xs font-semibold">
+              <th class="py-3 px-3 md:px-4 rounded-l-lg">週期範圍</th>
+              <th class="py-3 px-3 text-slate-300">基準日期區間</th>
+              <th class="py-3 px-3 text-red-400 text-right">上漲佔比 (當日/累積)</th>
+              <th class="py-3 px-3 text-emerald-400 text-right">下跌佔比 (當日/累積)</th>
+              <th class="py-3 px-3 text-slate-300 text-right">持平佔比 (當日/累積)</th>
+              <th class="py-3 px-3 text-red-300 text-right">漲停佔比</th>
+              <th class="py-3 px-3 text-emerald-300 text-right">跌停佔比</th>
+              <th class="py-3 px-3 md:px-4 text-center rounded-r-lg">多空優勢比率</th>
+            </tr>
+          </thead>
+          <tbody id="dataTableBody" class="divide-y divide-slate-800/60 text-slate-300 font-mono">
+            <!-- 動態注入表格資料 -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 5. 數據演進深度分析面板 (3大研判關鍵) -->
+    <section class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4">
+        <div class="flex items-center gap-2 mb-2 text-red-400 font-bold text-sm">
+          <i data-lucide="zap" class="w-4 h-4"></i>
+          1. 短線動能急遽噴發 (3日~5日)
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          近3日上漲佔比高達 <strong class="text-red-400">55.27%</strong>（582/1053），漲停佔比更達 <strong class="text-red-400">50.00%</strong>（10/20）。這表示近3日市場所有累積的漲停次數中，當日即貢獻了一半，短線資金點火集中，多頭攻擊猛烈。
+        </p>
+      </div>
+
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4">
+        <div class="flex items-center gap-2 mb-2 text-cyan-400 font-bold text-sm">
+          <i data-lucide="filter" class="w-4 h-4"></i>
+          2. 中長週期平滑收斂 (10日~30日)
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          隨著週期擴大至15日與30日，上漲佔比由 7.45% 衰減至 <strong class="text-slate-200">3.31%</strong>，下跌佔比由 5.87% 收斂至 <strong class="text-slate-200">3.26%</strong>。這符合數學大數法則下的正常收斂，但短線優勢已逐漸向長期平均靠攏。
+        </p>
+      </div>
+
+      <div class="bg-slate-900/60 border border-slate-800/80 rounded-2xl p-4">
+        <div class="flex items-center gap-2 mb-2 text-amber-400 font-bold text-sm">
+          <i data-lucide="shield-alert" class="w-4 h-4"></i>
+          3. 跌停抗跌韌性顯現 (低基數防守)
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          跌停累積總量在30天內僅 78 支次，遠低於漲停的 466 支次。當日跌停 5 支在30日佔比為 <strong class="text-emerald-400">6.41%</strong>，未見恐慌性系統崩潰，盤面結構偏向良性輪動與軋空蓄勢。
+        </p>
+      </div>
+
+    </section>
+
+  </main>
+
+  <footer class="max-w-7xl mx-auto mt-10 pt-5 border-t border-slate-800 text-center text-xs text-slate-500">
+    <p>261103_市場多空累計演進分析儀表板 ｜ 台股量化策略研究室 ｜ 數據源自交易所統計報表 (基準日: 20261102)</p>
+  </footer>
+
+  <!-- 圖表與資料邏輯 JavaScript -->
+  <script>
+    // 原始數據庫
+    const rawData = [
+      {
+        period: "近3日",
+        dateRange: "20261029 ~ 20261102",
+        upRatio: 55.27, upCount: 582, upTotal: 1053,
+        downRatio: 23.70, downCount: 641, downTotal: 2705,
+        flatRatio: 42.25, flatCount: 150, flatTotal: 355,
+        limitUpRatio: 50.00, limitUpCount: 10, limitUpTotal: 20,
+        limitDownRatio: 27.78, limitDownCount: 5, limitDownTotal: 18,
+        ratioScore: (55.27 / 23.70).toFixed(2)
+      },
+      {
+        period: "近5日",
+        dateRange: "20261027 ~ 20261102",
+        upRatio: 23.02, upCount: 582, upTotal: 2528,
+        downRatio: 17.16, downCount: 641, downTotal: 3736,
+        flatRatio: 24.92, flatCount: 150, flatTotal: 602,
+        limitUpRatio: 17.86, limitUpCount: 10, limitUpTotal: 56,
+        limitDownRatio: 22.73, limitDownCount: 5, limitDownTotal: 22,
+        ratioScore: (23.02 / 17.16).toFixed(2)
+      },
+      {
+        period: "近10日",
+        dateRange: "20261016 ~ 20261102",
+        upRatio: 11.49, upCount: 582, upTotal: 5065,
+        downRatio: 8.64, downCount: 641, downTotal: 7416,
+        flatRatio: 12.22, flatCount: 150, flatTotal: 1227,
+        limitUpRatio: 9.09, limitUpCount: 10, limitUpTotal: 110,
+        limitDownRatio: 16.67, limitDownCount: 5, limitDownTotal: 30,
+        ratioScore: (11.49 / 8.64).toFixed(2)
+      },
+      {
+        period: "近15日",
+        dateRange: "20261008 ~ 20261102",
+        upRatio: 7.45, upCount: 582, upTotal: 7809,
+        downRatio: 5.87, downCount: 641, downTotal: 10920,
+        flatRatio: 8.25, flatCount: 150, flatTotal: 1819,
+        limitUpRatio: 5.43, limitUpCount: 10, limitUpTotal: 184,
+        limitDownRatio: 7.94, limitDownCount: 5, limitDownTotal: 63,
+        ratioScore: (7.45 / 5.87).toFixed(2)
+      },
+      {
+        period: "近20日",
+        dateRange: "20261001 ~ 20261102",
+        upRatio: 5.36, upCount: 582, upTotal: 10853,
+        downRatio: 4.55, downCount: 641, downTotal: 14079,
+        flatRatio: 6.07, flatCount: 150, flatTotal: 2471,
+        limitUpRatio: 3.72, limitUpCount: 10, limitUpTotal: 269,
+        limitDownRatio: 6.94, limitDownCount: 5, limitDownTotal: 72,
+        ratioScore: (5.36 / 4.55).toFixed(2)
+      },
+      {
+        period: "近30日",
+        dateRange: "20260915 ~ 20261102",
+        upRatio: 3.31, upCount: 582, upTotal: 17609,
+        downRatio: 3.26, downCount: 641, downTotal: 19685,
+        flatRatio: 3.95, flatCount: 150, flatTotal: 3797,
+        limitUpRatio: 2.15, limitUpCount: 10, limitUpTotal: 466,
+        limitDownRatio: 6.41, limitDownCount: 5, limitDownTotal: 78,
+        ratioScore: (3.31 / 3.26).toFixed(2)
+      }
+    ];
+
+    // 渲染資料表格
+    function renderTable() {
+      const tbody = document.getElementById("dataTableBody");
+      tbody.innerHTML = "";
+
+      rawData.forEach((row, idx) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-800/50 transition-colors";
+
+        const badgeClass = row.ratioScore >= 2.0 
+          ? "bg-red-500/20 text-red-400 border border-red-500/40" 
+          : row.ratioScore > 1.2 
+          ? "bg-red-950/40 text-red-300 border border-red-900/40" 
+          : "bg-slate-800 text-slate-300";
+
+        tr.innerHTML = `
+          <td class="py-3.5 px-3 md:px-4 font-bold text-white flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+            ${row.period}
+          </td>
+          <td class="py-3.5 px-3 text-xs text-slate-400 font-sans">${row.dateRange}</td>
+          <td class="py-3.5 px-3 text-right">
+            <span class="text-red-400 font-bold">${row.upRatio.toFixed(2)}%</span>
+            <span class="text-[11px] text-slate-500 block">(${row.upCount}/${row.upTotal})</span>
+          </td>
+          <td class="py-3.5 px-3 text-right">
+            <span class="text-emerald-400 font-bold">${row.downRatio.toFixed(2)}%</span>
+            <span class="text-[11px] text-slate-500 block">(${row.downCount}/${row.downTotal})</span>
+          </td>
+          <td class="py-3.5 px-3 text-right">
+            <span class="text-slate-300 font-semibold">${row.flatRatio.toFixed(2)}%</span>
+            <span class="text-[11px] text-slate-500 block">(${row.flatCount}/${row.flatTotal})</span>
+          </td>
+          <td class="py-3.5 px-3 text-right">
+            <span class="text-red-300 font-bold">${row.limitUpRatio.toFixed(2)}%</span>
+            <span class="text-[11px] text-slate-500 block">(${row.limitUpCount}/${row.limitUpTotal})</span>
+          </td>
+          <td class="py-3.5 px-3 text-right">
+            <span class="text-emerald-300 font-bold">${row.limitDownRatio.toFixed(2)}%</span>
+            <span class="text-[11px] text-slate-500 block">(${row.limitDownCount}/${row.limitDownTotal})</span>
+          </td>
+          <td class="py-3.5 px-3 md:px-4 text-center">
+            <span class="px-2.5 py-1 rounded-full text-xs font-bold ${badgeClass}">
+              ${row.ratioScore}x 多勝
+            </span>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Chart 1: 衰減趨勢曲線
+    let trendChartInstance = null;
+    function initTrendChart() {
+      const ctx = document.getElementById("trendChart").getContext("2d");
+      const labels = rawData.map(d => d.period);
+
+      trendChartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "上漲佔比 (%)",
+              data: rawData.map(d => d.upRatio),
+              borderColor: "#ef4444",
+              backgroundColor: "rgba(239, 68, 68, 0.15)",
+              borderWidth: 3,
+              tension: 0.35,
+              fill: true,
+              pointBackgroundColor: "#ef4444",
+              pointRadius: 5,
+              pointHoverRadius: 7
+            },
+            {
+              label: "下跌佔比 (%)",
+              data: rawData.map(d => d.downRatio),
+              borderColor: "#22c55e",
+              backgroundColor: "rgba(34, 197, 94, 0.05)",
+              borderWidth: 2.5,
+              tension: 0.35,
+              fill: true,
+              pointBackgroundColor: "#22c55e",
+              pointRadius: 5,
+              pointHoverRadius: 7
+            },
+            {
+              label: "持平佔比 (%)",
+              data: rawData.map(d => d.flatRatio),
+              borderColor: "#94a3b8",
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              borderDash: [4, 4],
+              tension: 0.35,
+              pointBackgroundColor: "#94a3b8",
+              pointRadius: 4
+            },
+            {
+              label: "漲停佔比 (%)",
+              data: rawData.map(d => d.limitUpRatio),
+              borderColor: "#fb7185",
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              borderDash: [2, 2],
+              tension: 0.3,
+              pointBackgroundColor: "#fb7185",
+              pointRadius: 4
+            },
+            {
+              label: "跌停佔比 (%)",
+              data: rawData.map(d => d.limitDownRatio),
+              borderColor: "#2dd4bf",
+              backgroundColor: "transparent",
+              borderWidth: 2,
+              borderDash: [2, 2],
+              tension: 0.3,
+              pointBackgroundColor: "#2dd4bf",
+              pointRadius: 4
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: "top",
+              labels: {
+                color: "#cbd5e1",
+                font: { size: 12, family: "'Inter', 'Noto Sans TC'" },
+                usePointStyle: true,
+                boxWidth: 8
+              }
+            },
+            tooltip: {
+              backgroundColor: "#0f172a",
+              titleColor: "#f8fafc",
+              bodyColor: "#cbd5e1",
+              borderColor: "#334155",
+              borderWidth: 1,
+              padding: 12,
+              displayColors: true,
+              callbacks: {
+                label: function(context) {
+                  return ` ${context.dataset.label}: ${context.parsed.y.toFixed(2)}%`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: "rgba(51, 65, 85, 0.4)" },
+              ticks: { color: "#94a3b8", font: { size: 12 } }
+            },
+            y: {
+              grid: { color: "rgba(51, 65, 85, 0.4)" },
+              ticks: {
+                color: "#94a3b8",
+                callback: function(value) { return value + "%"; }
+              },
+              title: {
+                display: true,
+                text: "當日 / 累積之佔比率 (%)",
+                color: "#64748b",
+                font: { size: 11 }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 篩選切換邏輯
+    function setTrendFilter(type) {
+      const btnAll = document.getElementById("btnTrendAll");
+      const btnMain = document.getElementById("btnTrendMain");
+      const btnLimit = document.getElementById("btnTrendLimit");
+
+      const defaultBtn = "px-2.5 py-1 rounded-lg hover:text-slate-200 transition-all text-slate-400";
+      const activeBtn = "px-2.5 py-1 rounded-lg bg-red-600 text-white font-semibold shadow transition-all";
+
+      btnAll.className = defaultBtn;
+      btnMain.className = defaultBtn;
+      btnLimit.className = defaultBtn;
+
+      if (type === 'all') {
+        btnAll.className = activeBtn;
+        trendChartInstance.data.datasets.forEach(ds => ds.hidden = false);
+      } else if (type === 'main') {
+        btnMain.className = activeBtn;
+        trendChartInstance.data.datasets[0].hidden = false; // 上漲
+        trendChartInstance.data.datasets[1].hidden = false; // 下跌
+        trendChartInstance.data.datasets[2].hidden = false; // 持平
+        trendChartInstance.data.datasets[3].hidden = true;  // 漲停
+        trendChartInstance.data.datasets[4].hidden = true;  // 跌停
+      } else if (type === 'limit') {
+        btnLimit.className = activeBtn;
+        trendChartInstance.data.datasets[0].hidden = true;  // 上漲
+        trendChartInstance.data.datasets[1].hidden = true;  // 下跌
+        trendChartInstance.data.datasets[2].hidden = true;  // 持平
+        trendChartInstance.data.datasets[3].hidden = false; // 漲停
+        trendChartInstance.data.datasets[4].hidden = false; // 跌停
+      }
+      trendChartInstance.update();
+    }
+
+    // Chart 2: 累積總量柱狀圖
+    function initVolumeChart() {
+      const ctx = document.getElementById("volumeChart").getContext("2d");
+      const labels = rawData.map(d => d.period);
+
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "累積上漲總量",
+              data: rawData.map(d => d.upTotal),
+              backgroundColor: "rgba(239, 68, 68, 0.8)",
+              borderColor: "#ef4444",
+              borderWidth: 1,
+              borderRadius: 6
+            },
+            {
+              label: "累積下跌總量",
+              data: rawData.map(d => d.downTotal),
+              backgroundColor: "rgba(34, 197, 94, 0.8)",
+              borderColor: "#22c55e",
+              borderWidth: 1,
+              borderRadius: 6
+            },
+            {
+              label: "累積持平總量",
+              data: rawData.map(d => d.flatTotal),
+              backgroundColor: "rgba(148, 163, 184, 0.6)",
+              borderColor: "#94a3b8",
+              borderWidth: 1,
+              borderRadius: 6
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: true,
+              position: "top",
+              labels: {
+                color: "#cbd5e1",
+                font: { size: 12 },
+                usePointStyle: true,
+                boxWidth: 8
+              }
+            },
+            tooltip: {
+              backgroundColor: "#0f172a",
+              titleColor: "#f8fafc",
+              bodyColor: "#cbd5e1",
+              borderColor: "#334155",
+              borderWidth: 1,
+              padding: 12,
+              callbacks: {
+                label: function(context) {
+                  return ` ${context.dataset.label}: ${context.parsed.y.toLocaleString()} 檔次`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: "#94a3b8" }
+            },
+            y: {
+              grid: { color: "rgba(51, 65, 85, 0.4)" },
+              ticks: {
+                color: "#94a3b8",
+                callback: function(value) { return (value / 1000) + "k"; }
+              },
+              title: {
+                display: true,
+                text: "累計標的總數 (家次)",
+                color: "#64748b",
+                font: { size: 11 }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    // 頁面載入初始化
+    window.addEventListener("DOMContentLoaded", () => {
+      // 載入 Lucide Icons
+      if (window.lucide) {
+        lucide.createIcons();
+      }
+      renderTable();
+      initTrendChart();
+      initVolumeChart();
+    });
+  </script>
+</body>
+</html>
